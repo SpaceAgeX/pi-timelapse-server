@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>3D Printer Timelapse</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+</head>
+
+<body>
+    <main class="page">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">
+                    Raspberry Pi Camera
+                </p>
+
+                <h1>3D Printer Timelapse</h1>
+            </div>
+
+            <div
+                id="camera-status"
+                class="status status-loading"
+            >
+                Connecting
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <section class="camera-card">
+                <div class="video-container">
+                    <img
+                        id="camera-feed"
+                        src="/api/stream"
+                        alt="Live view of the 3D printer"
+                    >
+
+                    <div
+                        id="camera-error"
+                        class="camera-error hidden"
+                    >
+                        Camera preview unavailable
+                    </div>
+
+                    <div class="live-badge">
+                        <span></span>
+                        Live
+                    </div>
+                </div>
+
+                <footer class="camera-footer">
+                    <span>Logitech C922</span>
+                    <span>1920 × 1080</span>
+                </footer>
+            </section>
+
+            <aside class="control-card">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">
+                            Recording controls
+                        </p>
+
+                        <h2>Timelapse</h2>
+                    </div>
+
+                    <div
+                        id="timelapse-state"
+                        class="state-badge"
+                    >
+                        Idle
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="print-name">
+                        Print name
+                    </label>
+
+                    <input
+                        id="print-name"
+                        type="text"
+                        maxlength="80"
+                        value="Overnight Print"
+                        placeholder="Overnight Print"
+                    >
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="interval">
+                            Photo interval
+                        </label>
+
+                        <select id="interval">
+                            <option value="5">
+                                Every 5 seconds
+                            </option>
+
+                            <option value="10" selected>
+                                Every 10 seconds
+                            </option>
+
+                            <option value="15">
+                                Every 15 seconds
+                            </option>
+
+                            <option value="30">
+                                Every 30 seconds
+                            </option>
+
+                            <option value="60">
+                                Every minute
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="duration">
+                            Stop after
+                        </label>
+
+                        <select id="duration">
+                            <option value="4">
+                                4 hours
+                            </option>
+
+                            <option value="6">
+                                6 hours
+                            </option>
+
+                            <option value="8" selected>
+                                8 hours
+                            </option>
+
+                            <option value="10">
+                                10 hours
+                            </option>
+
+                            <option value="12">
+                                12 hours
+                            </option>
+
+                            <option value="0">
+                                Manually stopped
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <label class="checkbox-row">
+                    <input
+                        id="delete-frames"
+                        type="checkbox"
+                        checked
+                    >
+
+                    <span>
+                        Delete photos after the MP4 is created
+                    </span>
+                </label>
+
+                <div class="button-row">
+                    <button
+                        id="start-button"
+                        class="primary-button"
+                        type="button"
+                    >
+                        Start timelapse
+                    </button>
+
+                    <button
+                        id="stop-button"
+                        class="danger-button"
+                        type="button"
+                        disabled
+                    >
+                        Stop and create video
+                    </button>
+                </div>
+
+                <p
+                    id="message"
+                    class="message"
+                    aria-live="polite"
+                ></p>
+            </aside>
+        </div>
+
+        <section class="statistics-grid">
+            <article class="stat-card">
+                <span class="stat-label">
+                    Elapsed
+                </span>
+
+                <strong id="elapsed-value">
+                    00:00:00
+                </strong>
+            </article>
+
+            <article class="stat-card">
+                <span class="stat-label">
+                    Remaining
+                </span>
+
+                <strong id="remaining-value">
+                    —
+                </strong>
+            </article>
+
+            <article class="stat-card">
+                <span class="stat-label">
+                    Photos
+                </span>
+
+                <strong id="frame-count">
+                    0
+                </strong>
+            </article>
+
+            <article class="stat-card">
+                <span class="stat-label">
+                    Session size
+                </span>
+
+                <strong id="session-size">
+                    0 MB
+                </strong>
+            </article>
+
+            <article class="stat-card">
+                <span class="stat-label">
+                    Free storage
+                </span>
+
+                <strong id="free-storage">
+                    —
+                </strong>
+            </article>
+        </section>
+
+        <section class="recordings-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">
+                        Saved files
+                    </p>
+
+                    <h2>Completed videos</h2>
+                </div>
+
+                <button
+                    id="refresh-recordings"
+                    class="secondary-button"
+                    type="button"
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div id="recordings-list">
+                <p class="empty-message">
+                    Loading recordings…
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
