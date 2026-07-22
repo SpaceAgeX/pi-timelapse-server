@@ -5,8 +5,8 @@ const cameraError = document.querySelector("#camera-error");
 const timelapseState = document.querySelector("#timelapse-state");
 
 const printNameInput = document.querySelector("#print-name");
-const intervalSelect = document.querySelector("#interval");
-const durationSelect = document.querySelector("#duration");
+const intervalInput = document.querySelector("#interval");
+const durationInput = document.querySelector("#duration");
 const deleteFramesCheckbox = document.querySelector("#delete-frames");
 
 const startButton = document.querySelector("#start-button");
@@ -14,6 +14,7 @@ const stopButton = document.querySelector("#stop-button");
 const refreshRecordingsButton = document.querySelector(
     "#refresh-recordings",
 );
+const clearRecordingsButton = document.querySelector("#clear-recordings");
 
 const messageElement = document.querySelector("#message");
 
@@ -181,9 +182,10 @@ function updateTimelapseStatus(timelapse) {
     stopButton.disabled = !canStop;
 
     printNameInput.disabled = isActive;
-    intervalSelect.disabled = isActive;
-    durationSelect.disabled = isActive;
+    intervalInput.disabled = isActive;
+    durationInput.disabled = isActive;
     deleteFramesCheckbox.disabled = isActive;
+    clearRecordingsButton.disabled = isActive;
 
     if (state !== previousTimelapseState) {
         if (state === "recording") {
@@ -248,20 +250,20 @@ async function loadStatus() {
 async function startTimelapse() {
     startButton.disabled = true;
 
-    const durationValue = Number(
-        durationSelect.value,
-    );
+    const intervalValue = Number(intervalInput.value);
+    const durationText = durationInput.value.trim();
+    const durationValue = durationText === "" ? null : Number(durationText);
+
+    if (!intervalInput.reportValidity()
+        || (durationText !== "" && !durationInput.reportValidity())) {
+        startButton.disabled = false;
+        return;
+    }
 
     const requestBody = {
         name: printNameInput.value.trim() || "3D Print",
-        interval_seconds: Number(
-            intervalSelect.value,
-        ),
-        duration_hours: (
-            durationValue === 0
-                ? null
-                : durationValue
-        ),
+        interval_seconds: intervalValue,
+        duration_hours: durationValue,
         delete_frames_after_encoding: (
             deleteFramesCheckbox.checked
         ),
@@ -301,6 +303,34 @@ async function stopTimelapse() {
         console.error(error);
         showMessage(error.message, "error");
         stopButton.disabled = false;
+    }
+}
+
+
+async function clearRecordings() {
+    if (!window.confirm(
+        "Permanently delete all completed videos and saved frames?",
+    )) {
+        return;
+    }
+
+    clearRecordingsButton.disabled = true;
+
+    try {
+        const result = await apiRequest("/api/recordings", {
+            method: "DELETE",
+        });
+        showMessage(
+            `Cleared ${result.files_deleted} files (${formatBytes(result.bytes_deleted)}).`,
+            "success",
+        );
+        await loadRecordings();
+        await loadStatus();
+    } catch (error) {
+        console.error(error);
+        showMessage(error.message, "error");
+    } finally {
+        clearRecordingsButton.disabled = false;
     }
 }
 
@@ -393,6 +423,8 @@ refreshRecordingsButton.addEventListener(
     "click",
     loadRecordings,
 );
+
+clearRecordingsButton.addEventListener("click", clearRecordings);
 
 
 loadStatus();

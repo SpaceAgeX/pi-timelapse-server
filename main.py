@@ -739,6 +739,44 @@ def list_recordings() -> list[dict[str, Any]]:
     return recordings
 
 
+def clear_recordings() -> dict[str, int]:
+    files_deleted = 0
+    bytes_deleted = 0
+
+    if not RECORDINGS_DIR.exists():
+        return {"files_deleted": 0, "bytes_deleted": 0}
+
+    for path in RECORDINGS_DIR.rglob("*"):
+        if not path.is_file():
+            continue
+
+        try:
+            bytes_deleted += path.stat().st_size
+            path.unlink()
+            files_deleted += 1
+        except FileNotFoundError:
+            continue
+
+    directories = (
+        path for path in RECORDINGS_DIR.rglob("*")
+        if path.is_dir()
+    )
+    for directory in sorted(
+        directories,
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        try:
+            directory.rmdir()
+        except (FileNotFoundError, OSError):
+            continue
+
+    return {
+        "files_deleted": files_deleted,
+        "bytes_deleted": bytes_deleted,
+    }
+
+
 def find_recording(filename: str) -> Path | None:
     safe_filename = Path(filename).name
 
@@ -984,6 +1022,25 @@ def recordings():
     return {
         "recordings": list_recordings(),
     }
+
+
+@app.delete("/api/recordings")
+def delete_recordings():
+    with timelapse_manager.lock:
+        if timelapse_manager.state in {
+            "recording",
+            "stopping",
+            "encoding",
+        }:
+            raise HTTPException(
+                status_code=409,
+                detail="Stop the active timelapse before clearing files",
+            )
+
+        return {
+            "success": True,
+            **clear_recordings(),
+        }
 
 
 @app.get(

@@ -260,6 +260,7 @@ h2 {
 }
 
 input[type="text"],
+input[type="number"],
 select {
     width: 100%;
     padding: 11px 12px;
@@ -273,6 +274,7 @@ select {
 }
 
 input[type="text"]:focus,
+input[type="number"]:focus,
 select:focus {
     border-color: var(--accent);
 }
@@ -429,6 +431,44 @@ select:focus {
     display: none !important;
 }
 
+.input-with-unit {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--field);
+}
+
+.input-with-unit:focus-within {
+    border-color: var(--accent);
+}
+
+.input-with-unit input {
+    width: 100%;
+    min-width: 0;
+    padding: 11px 12px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+}
+
+.input-with-unit span,
+.form-group small {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.input-with-unit span {
+    padding-right: 12px;
+}
+
+.recording-actions {
+    display: flex;
+    gap: 10px;
+}
+
 @media (max-width: 1050px) {
     .main-grid {
         grid-template-columns: 1fr;
@@ -452,6 +492,12 @@ select:focus {
     .form-grid,
     .button-row {
         grid-template-columns: 1fr;
+    }
+
+    .recordings-card .section-heading,
+    .recording-actions {
+        align-items: stretch;
+        flex-direction: column;
     }
 
     .statistics-grid {

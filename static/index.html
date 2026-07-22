@@ -101,27 +101,11 @@
                             Photo interval
                         </label>
 
-                        <select id="interval">
-                            <option value="5">
-                                Every 5 seconds
-                            </option>
-
-                            <option value="10" selected>
-                                Every 10 seconds
-                            </option>
-
-                            <option value="15">
-                                Every 15 seconds
-                            </option>
-
-                            <option value="30">
-                                Every 30 seconds
-                            </option>
-
-                            <option value="60">
-                                Every minute
-                            </option>
-                        </select>
+                        <div class="input-with-unit">
+                            <input id="interval" type="number" value="10"
+                                min="1" max="3600" step="0.1" required>
+                            <span>seconds</span>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -129,31 +113,13 @@
                             Stop after
                         </label>
 
-                        <select id="duration">
-                            <option value="4">
-                                4 hours
-                            </option>
-
-                            <option value="6">
-                                6 hours
-                            </option>
-
-                            <option value="8" selected>
-                                8 hours
-                            </option>
-
-                            <option value="10">
-                                10 hours
-                            </option>
-
-                            <option value="12">
-                                12 hours
-                            </option>
-
-                            <option value="0">
-                                Manually stopped
-                            </option>
-                        </select>
+                        <div class="input-with-unit">
+                            <input id="duration" type="number" value="8"
+                                min="0.01" max="168" step="0.01"
+                                placeholder="Manual">
+                            <span>hours</span>
+                        </div>
+                        <small>Leave blank to stop manually.</small>
                     </div>
                 </div>
 
@@ -258,13 +224,12 @@
                     <h2>Completed videos</h2>
                 </div>
 
-                <button
-                    id="refresh-recordings"
-                    class="secondary-button"
-                    type="button"
-                >
-                    Refresh
-                </button>
+                <div class="recording-actions">
+                    <button id="refresh-recordings" class="secondary-button"
+                        type="button">Refresh</button>
+                    <button id="clear-recordings" class="danger-button"
+                        type="button">Clear videos &amp; frames</button>
+                </div>
             </div>
 
             <div id="recordings-list">
