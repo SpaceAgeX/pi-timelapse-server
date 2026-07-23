@@ -45,6 +45,12 @@ select {
     font: inherit;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 button {
     cursor: pointer;
 }
@@ -261,6 +267,7 @@ h2 {
 
 input[type="text"],
 input[type="number"],
+input[type="password"],
 select {
     width: 100%;
     padding: 11px 12px;
@@ -275,6 +282,7 @@ select {
 
 input[type="text"]:focus,
 input[type="number"]:focus,
+input[type="password"]:focus,
 select:focus {
     border-color: var(--accent);
 }
@@ -431,6 +439,32 @@ select:focus {
     display: none !important;
 }
 
+.login-page {
+    display: grid;
+    place-items: center;
+}
+
+.login-card {
+    width: min(420px, 100%);
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--panel);
+}
+
+.login-card h1 {
+    font-size: 2rem;
+}
+
+.login-description {
+    margin: 10px 0 24px;
+    color: var(--muted);
+}
+
+.login-form .primary-button {
+    width: 100%;
+}
+
 .input-with-unit {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -487,6 +521,11 @@ select:focus {
     .page-header {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
     }
 
     .form-grid,

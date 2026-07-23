@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
+import os
+import secrets
 import shutil
 import subprocess
 import threading
@@ -9,10 +14,18 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 import cv2
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -31,6 +44,18 @@ PREVIEW_FPS = 10
 PREVIEW_JPEG_QUALITY = 75
 TIMELAPSE_JPEG_QUALITY = 92
 OUTPUT_VIDEO_FPS = 30
+
+AUTH_USERNAME = os.environ.get("TIMELAPSE_AUTH_USERNAME", "admin")
+AUTH_PASSWORD_HASH = os.environ.get("TIMELAPSE_AUTH_PASSWORD_HASH", "")
+SESSION_SECRET = os.environ.get("TIMELAPSE_SESSION_SECRET", "")
+SESSION_COOKIE = "timelapse_session"
+SESSION_SECONDS = 7 * 24 * 60 * 60
+PASSWORD_HASHER = PasswordHasher()
+
+LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+LOGIN_ATTEMPTS_LOCK = threading.Lock()
+LOGIN_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_ATTEMPTS = 5
 
 
 class TimelapseStartRequest(BaseModel):
@@ -70,6 +95,10 @@ class TimelapseEncodeRequest(BaseModel):
     delete_frames_after_encoding: bool = False
 
 
+class CameraPowerRequest(BaseModel):
+    enabled: bool
+
+
 class CameraManager:
     def __init__(self) -> None:
         self.capture: cv2.VideoCapture | None = None
@@ -79,10 +108,21 @@ class CameraManager:
         self.frame_lock = threading.Lock()
         self.stop_event = threading.Event()
         self.reader_thread: threading.Thread | None = None
+        self.control_lock = threading.Lock()
+        self.enabled = True
 
         self.last_error: str | None = None
 
     def start(self) -> None:
+        with self.control_lock:
+            self._start()
+
+    def _start(self) -> None:
+        if self.capture is not None and self.capture.isOpened():
+            self.enabled = True
+            return
+
+        self.enabled = True
         self.capture = cv2.VideoCapture(
             CAMERA_DEVICE,
             cv2.CAP_V4L2,
@@ -110,8 +150,11 @@ class CameraManager:
         )
 
         if not self.capture.isOpened():
+            self.capture.release()
+            self.capture = None
+            self.last_error = f"Could not open camera at {CAMERA_DEVICE}"
             raise RuntimeError(
-                f"Could not open camera at {CAMERA_DEVICE}"
+                self.last_error
             )
 
         actual_width = int(
@@ -172,6 +215,11 @@ class CameraManager:
         )
 
     def stop(self) -> None:
+        with self.control_lock:
+            self._stop()
+
+    def _stop(self) -> None:
+        self.enabled = False
         self.stop_event.set()
 
         if self.reader_thread is not None:
@@ -180,8 +228,13 @@ class CameraManager:
         if self.capture is not None:
             self.capture.release()
 
+        with self.frame_lock:
+            self.latest_frame = None
+            self.latest_frame_time = 0.0
+
         self.capture = None
         self.reader_thread = None
+        self.last_error = None
 
 
 class TimelapseManager:
@@ -807,18 +860,111 @@ def find_recording(filename: str) -> Path | None:
     return resolved_match
 
 
+def encode_token_part(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def decode_token_part(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def create_session_token() -> tuple[str, str]:
+    csrf_token = secrets.token_urlsafe(32)
+    payload = json.dumps(
+        {
+            "username": AUTH_USERNAME,
+            "expires_at": int(time.time()) + SESSION_SECONDS,
+            "csrf": csrf_token,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    encoded_payload = encode_token_part(payload)
+    signature = hmac.new(
+        SESSION_SECRET.encode("utf-8"),
+        encoded_payload.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return f"{encoded_payload}.{encode_token_part(signature)}", csrf_token
+
+
+def read_session_token(token: str | None) -> dict[str, Any] | None:
+    if not token or not SESSION_SECRET:
+        return None
+
+    try:
+        encoded_payload, encoded_signature = token.split(".", 1)
+        expected_signature = hmac.new(
+            SESSION_SECRET.encode("utf-8"),
+            encoded_payload.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        supplied_signature = decode_token_part(encoded_signature)
+
+        if not hmac.compare_digest(expected_signature, supplied_signature):
+            return None
+
+        payload = json.loads(decode_token_part(encoded_payload))
+        if payload.get("username") != AUTH_USERNAME:
+            return None
+        if int(payload.get("expires_at", 0)) <= time.time():
+            return None
+        if not isinstance(payload.get("csrf"), str):
+            return None
+        return payload
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def client_address(request: Request) -> str:
+    cloudflare_address = request.headers.get("cf-connecting-ip")
+    if cloudflare_address:
+        return cloudflare_address
+    return request.client.host if request.client else "unknown"
+
+
+def login_is_rate_limited(address: str) -> bool:
+    cutoff = time.time() - LOGIN_WINDOW_SECONDS
+    with LOGIN_ATTEMPTS_LOCK:
+        attempts = [
+            attempt for attempt in LOGIN_ATTEMPTS.get(address, [])
+            if attempt >= cutoff
+        ]
+        LOGIN_ATTEMPTS[address] = attempts
+        return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+
+def record_failed_login(address: str) -> None:
+    with LOGIN_ATTEMPTS_LOCK:
+        LOGIN_ATTEMPTS.setdefault(address, []).append(time.time())
+
+
+def clear_failed_logins(address: str) -> None:
+    with LOGIN_ATTEMPTS_LOCK:
+        LOGIN_ATTEMPTS.pop(address, None)
+
+
 camera_manager = CameraManager()
 timelapse_manager = TimelapseManager(camera_manager)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not AUTH_PASSWORD_HASH or not SESSION_SECRET:
+        raise RuntimeError(
+            "TIMELAPSE_AUTH_PASSWORD_HASH and TIMELAPSE_SESSION_SECRET "
+            "must be configured"
+        )
+
     RECORDINGS_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    camera_manager.start()
+    try:
+        camera_manager.start()
+    except RuntimeError as exc:
+        print(f"Camera unavailable at startup: {exc}")
 
     yield
 
@@ -844,11 +990,130 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+class AuthenticationMiddleware:
+    def __init__(self, application):
+        self.application = application
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.application(scope, receive, send)
+            return
+
+        request = Request(scope)
+        path = request.url.path
+        public_path = (
+            path in {"/login", "/health"}
+            or path.startswith("/static/")
+        )
+
+        if public_path:
+            await self.application(scope, receive, send)
+            return
+
+        session = read_session_token(request.cookies.get(SESSION_COOKIE))
+        if session is None:
+            if path.startswith("/api/"):
+                response = JSONResponse(
+                    {"detail": "Authentication required"},
+                    status_code=401,
+                )
+            else:
+                response = RedirectResponse("/login", status_code=303)
+            await response(scope, receive, send)
+            return
+
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            supplied_csrf = request.headers.get("x-csrf-token")
+            if not hmac.compare_digest(
+                supplied_csrf or "",
+                session["csrf"],
+            ):
+                response = JSONResponse(
+                    {"detail": "Invalid security token"},
+                    status_code=403,
+                )
+                await response(scope, receive, send)
+                return
+
+        scope["auth_session"] = session
+        await self.application(scope, receive, send)
+
+
+app.add_middleware(AuthenticationMiddleware)
+
 app.mount(
     "/static",
     StaticFiles(directory=STATIC_DIR),
     name="static",
 )
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/login")
+def login_page(request: Request):
+    if read_session_token(request.cookies.get(SESSION_COOKIE)):
+        return RedirectResponse("/", status_code=303)
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.post("/login")
+async def login(request: Request):
+    address = client_address(request)
+    if login_is_rate_limited(address):
+        return RedirectResponse("/login?error=locked", status_code=303)
+
+    body = (await request.body()).decode("utf-8", errors="replace")
+    fields = parse_qs(body, keep_blank_values=True)
+    username = fields.get("username", [""])[0]
+    password = fields.get("password", [""])[0]
+
+    password_matches = False
+    try:
+        password_matches = PASSWORD_HASHER.verify(
+            AUTH_PASSWORD_HASH,
+            password,
+        )
+    except (VerifyMismatchError, InvalidHashError):
+        pass
+
+    if username != AUTH_USERNAME or not password_matches:
+        record_failed_login(address)
+        return RedirectResponse("/login?error=invalid", status_code=303)
+
+    clear_failed_logins(address)
+    session_token, _ = create_session_token()
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE,
+        session_token,
+        max_age=SESSION_SECONDS,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    return response
+
+
+@app.get("/api/auth/session")
+def auth_session(request: Request):
+    session = request.scope["auth_session"]
+    return {
+        "username": session["username"],
+        "csrf_token": session["csrf"],
+    }
+
+
+@app.post("/api/auth/logout")
+def logout():
+    response = JSONResponse({"success": True})
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
 
 
 @app.get("/")
@@ -862,6 +1127,9 @@ def generate_preview():
     delay = 1 / PREVIEW_FPS
 
     while True:
+        if not camera_manager.enabled:
+            break
+
         frame = camera_manager.get_frame_copy()
 
         if frame is None:
@@ -915,6 +1183,7 @@ def application_status():
     return {
         "camera": {
             "connected": camera_manager.is_available(),
+            "enabled": camera_manager.enabled,
             "device": CAMERA_DEVICE,
             "resolution": (
                 f"{CAMERA_WIDTH}x{CAMERA_HEIGHT}"
@@ -1021,6 +1290,33 @@ def encode_existing_timelapse(
 def recordings():
     return {
         "recordings": list_recordings(),
+    }
+
+
+@app.post("/api/camera/power")
+def set_camera_power(request: CameraPowerRequest):
+    with timelapse_manager.lock:
+        if timelapse_manager.state in {"recording", "stopping", "encoding"}:
+            raise HTTPException(
+                status_code=409,
+                detail="Camera power cannot change during an active timelapse",
+            )
+
+        if request.enabled:
+            try:
+                camera_manager.start()
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=str(exc),
+                ) from exc
+        else:
+            camera_manager.stop()
+
+    return {
+        "enabled": camera_manager.enabled,
+        "connected": camera_manager.is_available(),
+        "last_error": camera_manager.last_error,
     }
 
 

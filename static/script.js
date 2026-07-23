@@ -1,6 +1,8 @@
 const cameraStatus = document.querySelector("#camera-status");
 const cameraFeed = document.querySelector("#camera-feed");
 const cameraError = document.querySelector("#camera-error");
+const cameraPowerButton = document.querySelector("#camera-power-button");
+const logoutButton = document.querySelector("#logout-button");
 
 const timelapseState = document.querySelector("#timelapse-state");
 
@@ -27,19 +29,30 @@ const freeStorageValue = document.querySelector("#free-storage");
 const recordingsList = document.querySelector("#recordings-list");
 
 let previousTimelapseState = null;
+let csrfToken = "";
+let cameraEnabled = true;
+let timelapseActive = false;
 
 
 async function apiRequest(url, options = {}) {
+    const method = (options.method || "GET").toUpperCase();
     const response = await fetch(url, {
         cache: "no-store",
         ...options,
         headers: {
             "Content-Type": "application/json",
+            ...(method !== "GET" && csrfToken
+                ? {"X-CSRF-Token": csrfToken}
+                : {}),
             ...(options.headers || {}),
         },
     });
 
     if (!response.ok) {
+        if (response.status === 401) {
+            window.location.assign("/login");
+        }
+
         let message = `HTTP ${response.status}`;
 
         try {
@@ -124,12 +137,25 @@ function showMessage(text, type = "") {
 
 
 function updateCameraStatus(camera) {
+    cameraEnabled = camera.enabled;
+    cameraPowerButton.textContent = camera.enabled ? "Cam off" : "Cam on";
+    cameraPowerButton.className = camera.enabled
+        ? "danger-button"
+        : "primary-button";
+    cameraPowerButton.disabled = timelapseActive;
+
     if (camera.connected) {
         cameraStatus.textContent = "Camera online";
         cameraStatus.className = "status status-online";
+    } else if (!camera.enabled) {
+        cameraStatus.textContent = "Camera off · low power";
+        cameraStatus.className = "status status-loading";
+        cameraError.textContent = "Camera is powered off";
+        cameraError.classList.remove("hidden");
     } else {
-        cameraStatus.textContent = "Camera offline";
+        cameraStatus.textContent = "Camera disconnected";
         cameraStatus.className = "status status-offline";
+        cameraError.textContent = "Camera preview unavailable";
     }
 }
 
@@ -175,6 +201,7 @@ function updateTimelapseStatus(timelapse) {
         "stopping",
         "encoding",
     ].includes(state);
+    timelapseActive = isActive;
 
     const canStop = state === "recording";
 
@@ -186,6 +213,7 @@ function updateTimelapseStatus(timelapse) {
     durationInput.disabled = isActive;
     deleteFramesCheckbox.disabled = isActive;
     clearRecordingsButton.disabled = isActive;
+    cameraPowerButton.disabled = isActive;
 
     if (state !== previousTimelapseState) {
         if (state === "recording") {
@@ -303,6 +331,51 @@ async function stopTimelapse() {
         console.error(error);
         showMessage(error.message, "error");
         stopButton.disabled = false;
+    }
+}
+
+
+async function toggleCameraPower() {
+    cameraPowerButton.disabled = true;
+    const enableCamera = !cameraEnabled;
+
+    try {
+        await apiRequest("/api/camera/power", {
+            method: "POST",
+            body: JSON.stringify({enabled: enableCamera}),
+        });
+
+        if (enableCamera) {
+            cameraFeed.src = `/api/stream?time=${Date.now()}`;
+            showMessage("Camera powered on.", "success");
+        } else {
+            cameraFeed.removeAttribute("src");
+            showMessage(
+                "Camera powered off. Preview processing is suspended.",
+                "success",
+            );
+        }
+        await loadStatus();
+    } catch (error) {
+        console.error(error);
+        showMessage(error.message, "error");
+        await loadStatus();
+    }
+}
+
+
+async function initializeSession() {
+    const session = await apiRequest("/api/auth/session");
+    csrfToken = session.csrf_token;
+}
+
+
+async function logout() {
+    logoutButton.disabled = true;
+    try {
+        await apiRequest("/api/auth/logout", {method: "POST"});
+    } finally {
+        window.location.assign("/login");
     }
 }
 
@@ -425,10 +498,18 @@ refreshRecordingsButton.addEventListener(
 );
 
 clearRecordingsButton.addEventListener("click", clearRecordings);
+cameraPowerButton.addEventListener("click", toggleCameraPower);
+logoutButton.addEventListener("click", logout);
 
 
-loadStatus();
-loadRecordings();
-
-window.setInterval(loadStatus, 2000);
-window.setInterval(loadRecordings, 30000);
+initializeSession()
+    .then(() => {
+        loadStatus();
+        loadRecordings();
+        window.setInterval(loadStatus, 2000);
+        window.setInterval(loadRecordings, 30000);
+    })
+    .catch((error) => {
+        console.error(error);
+        window.location.assign("/login");
+    });

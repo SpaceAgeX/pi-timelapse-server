@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · 3D Printer Timelapse</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-page">
+    <main class="login-card">
+        <p class="eyebrow">Private camera access</p>
+        <h1>Sign in</h1>
+        <p class="login-description">
+            Enter your credentials to access the timelapse controls.
+        </p>
+        <form action="/login" method="post" class="login-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input id="username" name="username" type="text"
+                    autocomplete="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password"
+                    autocomplete="current-password" required>
+            </div>
+            <p id="login-error" class="message error" aria-live="polite"></p>
+            <button class="primary-button" type="submit">Sign in</button>
+        </form>
+    </main>
+    <script>
+        const error = new URLSearchParams(window.location.search).get("error");
+        const message = document.querySelector("#login-error");
+        if (error === "locked") {
+            message.textContent = "Too many attempts. Try again in 15 minutes.";
+        } else if (error) {
+            message.textContent = "Incorrect username or password.";
+        }
+    </script>
+</body>
+</html>
