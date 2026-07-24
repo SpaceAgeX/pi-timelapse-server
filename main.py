@@ -1025,6 +1025,7 @@ class AuthenticationMiddleware:
                     DASHBOARD_LOGIN_URL,
                     status_code=303,
                 )
+                response.delete_cookie(SESSION_COOKIE, path="/")
             await response(scope, receive, send)
             return
 
@@ -1063,7 +1064,9 @@ def health():
 def login_page(request: Request):
     if read_session_token(request.cookies.get(SESSION_COOKIE)):
         return RedirectResponse("/", status_code=303)
-    return RedirectResponse(DASHBOARD_LOGIN_URL, status_code=303)
+    response = RedirectResponse(DASHBOARD_LOGIN_URL, status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
 
 
 @app.post("/login")
@@ -1083,6 +1086,7 @@ def auth_session(request: Request):
 @app.post("/api/auth/logout")
 def logout():
     response = JSONResponse({"success": True})
+    response.delete_cookie(SESSION_COOKIE, path="/")
     response.delete_cookie(
         SESSION_COOKIE,
         path="/",
