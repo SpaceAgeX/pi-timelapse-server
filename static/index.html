@@ -2,250 +2,121 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
-
-    <title>3D Printer Timelapse</title>
-
-    <link
-        rel="stylesheet"
-        href="/static/style.css"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Printer Camera</title>
+    <link rel="stylesheet" href="/static/style.css?v=8">
 </head>
-
 <body>
-    <main class="page">
-        <header class="page-header">
-            <div>
-                <p class="eyebrow">
-                    Raspberry Pi Camera
-                </p>
-
-                <h1>3D Printer Timelapse</h1>
-            </div>
-
-            <div class="header-actions">
-                <div
-                    id="camera-status"
-                    class="status status-loading"
-                >
-                    Connecting
-                </div>
-                <button id="camera-power-button" class="danger-button"
-                    type="button">Cam off</button>
-                <button id="logout-button" class="secondary-button"
-                    type="button">Sign out</button>
-            </div>
-        </header>
-
-        <div class="main-grid">
-            <section class="camera-card">
-                <div class="video-container">
-                    <img
-                        id="camera-feed"
-                        src="/api/stream"
-                        alt="Live view of the 3D printer"
-                    >
-
-                    <div
-                        id="camera-error"
-                        class="camera-error hidden"
-                    >
-                        Camera preview unavailable
-                    </div>
-
-                    <div class="live-badge">
-                        <span></span>
-                        Live
+    <main class="camera-workspace">
+        <section class="camera-stage" aria-label="Live printer camera">
+            <header class="top-bar">
+                <div class="brand">
+                    <span class="brand-mark" aria-hidden="true"></span>
+                    <div>
+                        <p class="eyebrow">Printer camera</p>
+                        <h1>Neptune 4</h1>
                     </div>
                 </div>
+                <div class="header-actions">
+                    <div id="camera-status" class="status status-loading">
+                        Connecting
+                    </div>
+                    <button id="camera-power-button" class="danger-button"
+                        type="button">Cam off</button>
+                    <button id="logout-button" class="secondary-button"
+                        type="button">Sign out</button>
+                </div>
+            </header>
 
-                <footer class="camera-footer">
-                    <span>Logitech C922</span>
-                    <span>1920 × 1080</span>
-                </footer>
+            <div class="video-frame">
+                <img id="camera-feed" src="/api/stream"
+                    alt="Live view of the 3D printer">
+                <div id="camera-error" class="camera-error hidden">
+                    Camera preview unavailable
+                </div>
+                <div class="live-badge"><span></span>Live</div>
+            </div>
+
+            <section class="statistics-grid" aria-label="Timelapse statistics">
+                <article class="stat-card">
+                    <span class="stat-label">Elapsed</span>
+                    <strong id="elapsed-value">00:00:00</strong>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Remaining</span>
+                    <strong id="remaining-value">—</strong>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Photos</span>
+                    <strong id="frame-count">0</strong>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Session</span>
+                    <strong id="session-size">0 MB</strong>
+                </article>
+                <article class="stat-card">
+                    <span class="stat-label">Free</span>
+                    <strong id="free-storage">—</strong>
+                </article>
             </section>
+        </section>
 
-            <aside class="control-card">
+        <aside class="control-dock">
+            <section class="control-card">
                 <div class="section-heading">
                     <div>
-                        <p class="eyebrow">
-                            Recording controls
-                        </p>
-
+                        <p class="eyebrow">Recording controls</p>
                         <h2>Timelapse</h2>
                     </div>
-
-                    <div
-                        id="timelapse-state"
-                        class="state-badge"
-                    >
-                        Idle
-                    </div>
+                    <div id="timelapse-state" class="state-badge">Idle</div>
                 </div>
 
                 <div class="form-group">
-                    <label for="print-name">
-                        Print name
-                    </label>
-
-                    <input
-                        id="print-name"
-                        type="text"
-                        maxlength="80"
-                        value="Overnight Print"
-                        placeholder="Overnight Print"
-                    >
+                    <label for="print-name">Print name</label>
+                    <input id="print-name" type="text" maxlength="80"
+                        value="Overnight Print" placeholder="Overnight Print">
                 </div>
-
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="interval">
-                            Photo interval
-                        </label>
-
-                        <div class="input-with-unit">
-                            <input id="interval" type="number" value="10"
-                                min="1" max="3600" step="0.1" required>
-                            <span>seconds</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="duration">
-                            Stop after
-                        </label>
-
-                        <div class="input-with-unit">
-                            <input id="duration" type="number" value="8"
-                                min="0.01" max="168" step="0.01"
-                                placeholder="Manual">
-                            <span>hours</span>
-                        </div>
-                        <small>Leave blank to stop manually.</small>
+                <div class="form-group">
+                    <label for="interval">Photo interval</label>
+                    <div class="input-with-unit">
+                        <input id="interval" type="number" value="10"
+                            min="1" max="3600" step="0.1" required>
+                        <span>seconds</span>
                     </div>
                 </div>
 
                 <label class="checkbox-row">
-                    <input
-                        id="delete-frames"
-                        type="checkbox"
-                        checked
-                    >
-
-                    <span>
-                        Delete photos after the MP4 is created
-                    </span>
+                    <input id="delete-frames" type="checkbox" checked>
+                    <span>Delete photos after the MP4 is created</span>
                 </label>
-
                 <div class="button-row">
-                    <button
-                        id="start-button"
-                        class="primary-button"
-                        type="button"
-                    >
-                        Start timelapse
-                    </button>
-
-                    <button
-                        id="stop-button"
-                        class="danger-button"
-                        type="button"
-                        disabled
-                    >
-                        Stop and create video
-                    </button>
+                    <button id="start-button" class="primary-button"
+                        type="button">Start timelapse</button>
+                    <button id="stop-button" class="danger-button"
+                        type="button" disabled>Stop &amp; create video</button>
                 </div>
+                <p id="message" class="message" aria-live="polite"></p>
+            </section>
 
-                <p
-                    id="message"
-                    class="message"
-                    aria-live="polite"
-                ></p>
-            </aside>
-        </div>
-
-        <section class="statistics-grid">
-            <article class="stat-card">
-                <span class="stat-label">
-                    Elapsed
-                </span>
-
-                <strong id="elapsed-value">
-                    00:00:00
-                </strong>
-            </article>
-
-            <article class="stat-card">
-                <span class="stat-label">
-                    Remaining
-                </span>
-
-                <strong id="remaining-value">
-                    —
-                </strong>
-            </article>
-
-            <article class="stat-card">
-                <span class="stat-label">
-                    Photos
-                </span>
-
-                <strong id="frame-count">
-                    0
-                </strong>
-            </article>
-
-            <article class="stat-card">
-                <span class="stat-label">
-                    Session size
-                </span>
-
-                <strong id="session-size">
-                    0 MB
-                </strong>
-            </article>
-
-            <article class="stat-card">
-                <span class="stat-label">
-                    Free storage
-                </span>
-
-                <strong id="free-storage">
-                    —
-                </strong>
-            </article>
-        </section>
-
-        <section class="recordings-card">
-            <div class="section-heading">
-                <div>
-                    <p class="eyebrow">
-                        Saved files
-                    </p>
-
-                    <h2>Completed videos</h2>
+            <section class="recordings-card">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Saved files</p>
+                        <h2>Videos</h2>
+                    </div>
+                    <div class="recording-actions">
+                        <button id="refresh-recordings" class="secondary-button"
+                            type="button">Refresh</button>
+                        <button id="clear-recordings" class="danger-button"
+                            type="button">Clear all</button>
+                    </div>
                 </div>
-
-                <div class="recording-actions">
-                    <button id="refresh-recordings" class="secondary-button"
-                        type="button">Refresh</button>
-                    <button id="clear-recordings" class="danger-button"
-                        type="button">Clear videos &amp; frames</button>
+                <div id="recordings-list">
+                    <p class="empty-message">Loading recordings…</p>
                 </div>
-            </div>
-
-            <div id="recordings-list">
-                <p class="empty-message">
-                    Loading recordings…
-                </p>
-            </div>
-        </section>
+            </section>
+        </aside>
     </main>
-
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js?v=2"></script>
 </body>
 </html>

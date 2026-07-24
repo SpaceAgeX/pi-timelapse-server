@@ -8,7 +8,6 @@ const timelapseState = document.querySelector("#timelapse-state");
 
 const printNameInput = document.querySelector("#print-name");
 const intervalInput = document.querySelector("#interval");
-const durationInput = document.querySelector("#duration");
 const deleteFramesCheckbox = document.querySelector("#delete-frames");
 
 const startButton = document.querySelector("#start-button");
@@ -210,7 +209,6 @@ function updateTimelapseStatus(timelapse) {
 
     printNameInput.disabled = isActive;
     intervalInput.disabled = isActive;
-    durationInput.disabled = isActive;
     deleteFramesCheckbox.disabled = isActive;
     clearRecordingsButton.disabled = isActive;
     cameraPowerButton.disabled = isActive;
@@ -279,11 +277,8 @@ async function startTimelapse() {
     startButton.disabled = true;
 
     const intervalValue = Number(intervalInput.value);
-    const durationText = durationInput.value.trim();
-    const durationValue = durationText === "" ? null : Number(durationText);
 
-    if (!intervalInput.reportValidity()
-        || (durationText !== "" && !durationInput.reportValidity())) {
+    if (!intervalInput.reportValidity()) {
         startButton.disabled = false;
         return;
     }
@@ -291,7 +286,7 @@ async function startTimelapse() {
     const requestBody = {
         name: printNameInput.value.trim() || "3D Print",
         interval_seconds: intervalValue,
-        duration_hours: durationValue,
+        duration_hours: null,
         delete_frames_after_encoding: (
             deleteFramesCheckbox.checked
         ),
