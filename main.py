@@ -49,7 +49,9 @@ AUTH_USERNAME = os.environ.get("TIMELAPSE_AUTH_USERNAME", "admin")
 AUTH_PASSWORD_HASH = os.environ.get("TIMELAPSE_AUTH_PASSWORD_HASH", "")
 SESSION_SECRET = os.environ.get("TIMELAPSE_SESSION_SECRET", "")
 SESSION_COOKIE = "timelapse_session"
+SESSION_DOMAIN = ".aryehlab.com"
 SESSION_SECONDS = 7 * 24 * 60 * 60
+DASHBOARD_LOGIN_URL = "https://aryehlab.com/?next=https://printercam.aryehlab.com/"
 PASSWORD_HASHER = PasswordHasher()
 
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
@@ -1019,7 +1021,10 @@ class AuthenticationMiddleware:
                     status_code=401,
                 )
             else:
-                response = RedirectResponse("/login", status_code=303)
+                response = RedirectResponse(
+                    DASHBOARD_LOGIN_URL,
+                    status_code=303,
+                )
             await response(scope, receive, send)
             return
 
@@ -1058,46 +1063,12 @@ def health():
 def login_page(request: Request):
     if read_session_token(request.cookies.get(SESSION_COOKIE)):
         return RedirectResponse("/", status_code=303)
-    return FileResponse(STATIC_DIR / "login.html")
+    return RedirectResponse(DASHBOARD_LOGIN_URL, status_code=303)
 
 
 @app.post("/login")
 async def login(request: Request):
-    address = client_address(request)
-    if login_is_rate_limited(address):
-        return RedirectResponse("/login?error=locked", status_code=303)
-
-    body = (await request.body()).decode("utf-8", errors="replace")
-    fields = parse_qs(body, keep_blank_values=True)
-    username = fields.get("username", [""])[0]
-    password = fields.get("password", [""])[0]
-
-    password_matches = False
-    try:
-        password_matches = PASSWORD_HASHER.verify(
-            AUTH_PASSWORD_HASH,
-            password,
-        )
-    except (VerifyMismatchError, InvalidHashError):
-        pass
-
-    if username != AUTH_USERNAME or not password_matches:
-        record_failed_login(address)
-        return RedirectResponse("/login?error=invalid", status_code=303)
-
-    clear_failed_logins(address)
-    session_token, _ = create_session_token()
-    response = RedirectResponse("/", status_code=303)
-    response.set_cookie(
-        SESSION_COOKIE,
-        session_token,
-        max_age=SESSION_SECONDS,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path="/",
-    )
-    return response
+    return RedirectResponse(DASHBOARD_LOGIN_URL, status_code=303)
 
 
 @app.get("/api/auth/session")
@@ -1112,7 +1083,14 @@ def auth_session(request: Request):
 @app.post("/api/auth/logout")
 def logout():
     response = JSONResponse({"success": True})
-    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        domain=SESSION_DOMAIN,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
     return response
 
 
